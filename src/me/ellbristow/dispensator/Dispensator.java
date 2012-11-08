@@ -78,6 +78,10 @@ public class Dispensator extends JavaPlugin implements Listener {
             sender.sendMessage(ChatColor.GRAY + "/disp toggle onePerPlayer");
             return true;
         }
+        if (!sender.hasPermission("dispensator.admin")) {
+            sender.sendMessage(ChatColor.RED + "You do not have permission to use this command!");
+            return true;
+        }
         if (args[0].equalsIgnoreCase("create")) {
             // Check looking at Dispenser
             Player commandPlayer = (Player)sender;
