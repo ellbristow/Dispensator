@@ -1,0 +1,24 @@
+name: Dispensator
+main: me.ellbristow.dispensator.Dispensator
+version: 0.0.1
+author: ellbristow
+dev-url: http://dev.bukkit.org/server-mods/dispensator
+description: >
+             Dispense written 
+commands:
+  dispenser:
+    description: Manage Dispensator protection
+    usage: "/dispenser [create|remove]"
+    aliases: disp
+    permission: dispensator.admin
+
+permissions:
+  dispensator.*:
+    description: Access to all Dispensator permissions
+    children:
+      dispensator.admin: true
+      dispensator.use: true
+  dispensator.admin:
+    description: Can create and remove Dispensators
+  dispensator.use:
+    description: Can use Dispensator
