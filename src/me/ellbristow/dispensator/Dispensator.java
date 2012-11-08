@@ -31,11 +31,20 @@ import org.bukkit.plugin.java.JavaPlugin;
 public class Dispensator extends JavaPlugin implements Listener {
     private File blockFile;
     private FileConfiguration blockStore;
+    private FileConfiguration config;
+    int dropRadius;
+    boolean onePerPlayer;
 
     @Override
     public void onEnable() {
         blockStore = getDispensators();
         getServer().getPluginManager().registerEvents(this, this);
+        config = getConfig();
+        dropRadius = config.getInt("dropRadius", 5);
+        config.set("dropRadius", dropRadius);
+        onePerPlayer = config.getBoolean("onePerPlayer", true);
+        config.set("onePerPlayer", onePerPlayer);
+        saveConfig();
     }
 
     @Override
@@ -51,23 +60,28 @@ public class Dispensator extends JavaPlugin implements Listener {
     @Override
     public boolean onCommand( CommandSender sender, Command cmd, String commandLabel, String[] args ) {
         if (commandLabel.equalsIgnoreCase("dispenser") || commandLabel.equalsIgnoreCase("disp")) {
-            if (!(sender instanceof Player)) {
+            if (!(sender instanceof Player) && (args.length >= 1 && (args[0].equalsIgnoreCase("create") || args[0].equalsIgnoreCase("remove")))) {
                 sender.sendMessage("This command is not available from the console!");
                 return true;
             }
-            return commandDispenser((Player)sender, args);
+            return commandDispenser(sender, args);
         }
         return true;
     }
     
-    private boolean commandDispenser( Player commandPlayer, String[] args ) {
+    private boolean commandDispenser( CommandSender sender, String[] args ) {
         if (args.length == 0) {
-            commandPlayer.sendMessage(ChatColor.RED + "You must specify create or remove!");
-            return false;
+            sender.sendMessage(ChatColor.GOLD + "Dispensator v" + this.getDescription().getVersion() + ChatColor.GOLD + " by ellbristow");
+            sender.sendMessage(ChatColor.GOLD + "One Per Player: " + ChatColor.WHITE + onePerPlayer + ChatColor.GOLD+" Drop Radius: " + ChatColor.WHITE + dropRadius);
+            sender.sendMessage(ChatColor.GRAY + "/disp [create|remove]");
+            sender.sendMessage(ChatColor.GRAY + "/disp set dropRadius [New Radius]");
+            sender.sendMessage(ChatColor.GRAY + "/disp toggle onePerPlayer");
+            return true;
         }
-        Block block = commandPlayer.getTargetBlock(null, 5);
-        if (args[0].equals("create")) {
+        if (args[0].equalsIgnoreCase("create")) {
             // Check looking at Dispenser
+            Player commandPlayer = (Player)sender;
+            Block block = commandPlayer.getTargetBlock(null, 5);
             if (!block.getType().equals(Material.DISPENSER)) {
                 commandPlayer.sendMessage(ChatColor.RED + "You can only turn dispensers into Dispensators!");
                 commandPlayer.sendMessage(ChatColor.RED + "(You're looking at a "+block.getType()+"!)");
@@ -75,14 +89,55 @@ public class Dispensator extends JavaPlugin implements Listener {
             }
             createDispensator(block);
             commandPlayer.sendMessage(ChatColor.GOLD+"Dispensator Created!");
-        } else if (args[0].equals("remove")) {
+        } else if (args[0].equalsIgnoreCase("remove")) {
             // Check looking at Dispensator
+            Player commandPlayer = (Player)sender;
+            Block block = commandPlayer.getTargetBlock(null, 5);
             if (!(block.getState() instanceof Dispenser) || !isDispensator(block)) {
                 commandPlayer.sendMessage(ChatColor.RED + "You are not looking at a Dispensator!");
                 return true;
             }
             removeDispensator(block);
             commandPlayer.sendMessage(ChatColor.GOLD+"Dispensator Removed!");
+        } else if (args[0].equalsIgnoreCase("set")) {
+            if (args.length < 3) {
+                sender.sendMessage(ChatColor.RED + "You must specify which setting to change and the new value!");
+                sender.sendMessage(ChatColor.RED + "/disp set [Setting Name] [New value]");
+                sender.sendMessage(ChatColor.RED + "Available Settings: dropRadius");
+                return true;
+            }
+            if (args[1].equalsIgnoreCase("dropRadius")) {
+                int newRadius;
+                try {
+                    newRadius = Integer.parseInt(args[2]);
+                } catch (NumberFormatException e) {
+                    sender.sendMessage(ChatColor.RED + "Drop Radius Settign must be a number");
+                    sender.sendMessage(ChatColor.RED + "/disp set dropRadius [New Radius]");
+                    return true;
+                }
+                dropRadius = newRadius;
+                config.set("dropRadius", dropRadius);
+                saveConfig();
+                sender.sendMessage(ChatColor.GOLD + "New Drop Radius set to " + ChatColor.WHITE + dropRadius);
+            }
+        }  else if (args[0].equalsIgnoreCase("toggle")) {
+            if (args.length < 2) {
+                sender.sendMessage(ChatColor.RED + "You must specify which setting to toggle!");
+                sender.sendMessage(ChatColor.RED + "/disp toggle [Toggle Name]");
+                sender.sendMessage(ChatColor.RED + "Available Settings: onePerPlayer");
+                return true;
+            }
+            if (args[1].equalsIgnoreCase("onePerPlayer")) {
+                if (onePerPlayer) {
+                    onePerPlayer = false;
+                    sender.sendMessage(ChatColor.GOLD + "Players may now receive unlimited items from Dispensators!");
+                } else {
+                    onePerPlayer = true;
+                    sender.sendMessage(ChatColor.GOLD + "Players may now receive only one item from Dispensators!");
+                }
+                config.set("onePerPlayer", onePerPlayer);
+                saveConfig();
+            }
         }
         return true;
     }
@@ -127,21 +182,31 @@ public class Dispensator extends JavaPlugin implements Listener {
             if (player.hasPermission("dispensator.use")) {
                 Dispenser disp = (Dispenser)event.getClickedBlock().getState();
                 ItemStack stack = disp.getInventory().getItem(0);
-                List<Entity> entities = player.getNearbyEntities(5, 5, 5);
-                for (Entity entity : entities) {
-                    if (entity.getType().equals(EntityType.DROPPED_ITEM)) {
-                        Item item = (Item)entity;
-                        if (item.getItemStack().getType().equals(stack.getType())) {
-                            player.sendMessage(ChatColor.RED + "You can only dispense one item at a time!");
-                            player.sendMessage(ChatColor.RED + "Please collect dropped items first!");
-                            event.setCancelled(true);
-                            return;
+                List<Entity> entities = player.getNearbyEntities(dropRadius, dropRadius, dropRadius);
+                if (stack != null) {
+                    if (onePerPlayer) {
+                        for (Entity entity : entities) {
+                            if (entity.getType().equals(EntityType.DROPPED_ITEM)) {
+                                Item item = (Item)entity;
+                                if (item.getItemStack().getType().equals(stack.getType())) {
+                                    player.sendMessage(ChatColor.RED + "You can only dispense one item at a time!");
+                                    player.sendMessage(ChatColor.RED + "Please collect dropped items first!");
+                                    event.setCancelled(true);
+                                    return;
+                                }
+                            } else if (entity.getType().equals(EntityType.PLAYER)) {
+                                Player nearPlayer = (Player)entity;
+                                if (nearPlayer.getInventory().contains(stack)) {
+                                    player.sendMessage(ChatColor.RED + "Someone else nearby already has this item!");
+                                    player.sendMessage(ChatColor.RED + "Ask them for theirs or ask them to leave!");
+                                    event.setCancelled(true);
+                                    return;
+                                }
+                            }
                         }
                     }
-                }
-                if (stack != null) {
                     stack = stack.clone();
-                    if (!player.getInventory().contains(stack)) {
+                    if (!player.getInventory().contains(stack) || !onePerPlayer) {
                         disp.dispense();
                         disp.getInventory().setItem(0, stack);
                     } else {
@@ -160,8 +225,26 @@ public class Dispensator extends JavaPlugin implements Listener {
     @EventHandler (priority = EventPriority.NORMAL)
     public void onDispense(BlockDispenseEvent event) {
         if (event.isCancelled()) return;
-        if (isDispensator(event.getBlock()) && event.getBlock().isBlockPowered()) {
-            event.setCancelled(true);
+        if (isDispensator(event.getBlock()) && event.getBlock().isBlockPowered() || event.getBlock().isBlockIndirectlyPowered()) {
+            Dispenser disp = (Dispenser)event.getBlock().getState();
+            if (onePerPlayer) {
+                List<Player> players = event.getBlock().getWorld().getPlayers();
+                for (Player player : players){
+                    if (isNear(player, disp) && player.getInventory().contains(event.getItem())) {
+                        event.setCancelled(true);
+                        return;
+                    }
+                }
+                Collection<Item> items = event.getBlock().getWorld().getEntitiesByClass(Item.class);
+                for (Item item : items){
+                    if (isNear(item, disp) && item.getItemStack().equals(event.getItem())) {
+                        event.setCancelled(true);
+                        return;
+                    }
+                }
+            }
+            ItemStack stack = event.getItem().clone();
+            disp.getInventory().addItem(stack);
         }
     }
     
@@ -187,6 +270,13 @@ public class Dispensator extends JavaPlugin implements Listener {
         }
         Boolean disp = blockStore.getBoolean(block.getWorld().getName()+"_"+block.getX()+"_"+block.getY()+"_"+block.getZ());
         if (disp != null && disp) {
+            return true;
+        }
+        return false;
+    }
+    
+    private boolean isNear(Entity entity, Dispenser disp) {
+        if (entity.getLocation().getX() <= disp.getX() + dropRadius && entity.getLocation().getX() >= disp.getX() - dropRadius && entity.getLocation().getZ() <= disp.getZ() + dropRadius && entity.getLocation().getZ() >= disp.getZ() - dropRadius) {
             return true;
         }
         return false;
