@@ -229,7 +229,7 @@ public class Dispensator extends JavaPlugin implements Listener {
     @EventHandler (priority = EventPriority.NORMAL)
     public void onDispense(BlockDispenseEvent event) {
         if (event.isCancelled()) return;
-        if (isDispensator(event.getBlock()) && event.getBlock().isBlockPowered() || event.getBlock().isBlockIndirectlyPowered()) {
+        if (isDispensator(event.getBlock()) && (event.getBlock().isBlockPowered() || event.getBlock().isBlockIndirectlyPowered())) {
             Dispenser disp = (Dispenser)event.getBlock().getState();
             if (onePerPlayer) {
                 List<Player> players = event.getBlock().getWorld().getPlayers();
@@ -272,8 +272,8 @@ public class Dispensator extends JavaPlugin implements Listener {
         if (!(block.getState() instanceof Dispenser)) {
             return false;
         }
-        Boolean disp = blockStore.getBoolean(block.getWorld().getName()+"_"+block.getX()+"_"+block.getY()+"_"+block.getZ());
-        if (disp != null && disp) {
+        Boolean disp = blockStore.getBoolean(block.getWorld().getName()+"_"+block.getX()+"_"+block.getY()+"_"+block.getZ(), false);
+        if (disp) {
             return true;
         }
         return false;

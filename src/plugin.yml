@@ -1,6 +1,6 @@
 name: Dispensator
 main: me.ellbristow.dispensator.Dispensator
-version: 0.0.2
+version: 1.0.0
 author: ellbristow
 dev-url: http://dev.bukkit.org/server-mods/dispensator
 description: >
