@@ -8,7 +8,9 @@ import java.util.List;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
 import org.bukkit.block.Dispenser;
+import org.bukkit.block.Dropper;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -86,8 +88,8 @@ public class Dispensator extends JavaPlugin implements Listener {
             // Check looking at Dispenser
             Player commandPlayer = (Player)sender;
             Block block = commandPlayer.getTargetBlock(null, 5);
-            if (!block.getType().equals(Material.DISPENSER)) {
-                commandPlayer.sendMessage(ChatColor.RED + "You can only turn dispensers into Dispensators!");
+            if (!block.getType().equals(Material.DISPENSER) && !block.getType().equals(Material.DROPPER)) {
+                commandPlayer.sendMessage(ChatColor.RED + "You can only turn dispensers and droppers into Dispensators!");
                 commandPlayer.sendMessage(ChatColor.RED + "(You're looking at a "+block.getType()+"!)");
                 return true;
             }
@@ -184,8 +186,19 @@ public class Dispensator extends JavaPlugin implements Listener {
         if (event.getAction().equals(Action.RIGHT_CLICK_BLOCK) && isDispensator(event.getClickedBlock()) && !(event.getPlayer().isSneaking() && event.getPlayer().hasPermission("dispensator.admin"))) {
             Player player = event.getPlayer();
             if (player.hasPermission("dispensator.use")) {
-                Dispenser disp = (Dispenser)event.getClickedBlock().getState();
-                ItemStack stack = disp.getInventory().getItem(0);
+                ItemStack stack = null;
+                Dispenser disp = null;
+                Dropper drop = null;
+                boolean isDrop = false;
+                BlockState blockState = event.getClickedBlock().getState();
+                if (blockState instanceof Dispenser) {
+                    disp = (Dispenser)blockState;
+                    stack = disp.getInventory().getItem(0);
+                } else if (blockState instanceof Dropper) {
+                    drop = (Dropper)blockState;
+                    stack = drop.getInventory().getItem(0);
+                    isDrop = true;
+                }
                 List<Entity> entities = player.getNearbyEntities(dropRadius, dropRadius, dropRadius);
                 if (stack != null) {
                     if (onePerPlayer) {
@@ -211,8 +224,13 @@ public class Dispensator extends JavaPlugin implements Listener {
                     }
                     stack = stack.clone();
                     if (!player.getInventory().contains(stack) || !onePerPlayer) {
-                        disp.dispense();
-                        disp.getInventory().setItem(0, stack);
+                        if (isDrop) {
+                            drop.drop();
+                            drop.getInventory().addItem(stack);
+                        } else {
+                            disp.dispense();
+                            disp.getInventory().addItem(stack);
+                        }
                     } else {
                         player.sendMessage(ChatColor.RED + "You already have this item in your inventory!");
                     }
@@ -230,25 +248,38 @@ public class Dispensator extends JavaPlugin implements Listener {
     public void onDispense(BlockDispenseEvent event) {
         if (event.isCancelled()) return;
         if (isDispensator(event.getBlock()) && (event.getBlock().isBlockPowered() || event.getBlock().isBlockIndirectlyPowered())) {
-            Dispenser disp = (Dispenser)event.getBlock().getState();
+            boolean isDrop = false;
+            Dispenser disp = null;
+            Dropper drop = null;
+            BlockState blockState = event.getBlock().getState();
+            if (blockState instanceof Dispenser) {
+                disp = (Dispenser)blockState;
+            } else {
+                drop = (Dropper)blockState;
+                isDrop = true;
+            }
             if (onePerPlayer) {
                 List<Player> players = event.getBlock().getWorld().getPlayers();
                 for (Player player : players){
-                    if (isNear(player, disp) && player.getInventory().contains(event.getItem())) {
+                    if (isNear(player, blockState) && player.getInventory().contains(event.getItem())) {
                         event.setCancelled(true);
                         return;
                     }
                 }
                 Collection<Item> items = event.getBlock().getWorld().getEntitiesByClass(Item.class);
                 for (Item item : items){
-                    if (isNear(item, disp) && item.getItemStack().equals(event.getItem())) {
+                    if (isNear(item, blockState) && item.getItemStack().equals(event.getItem())) {
                         event.setCancelled(true);
                         return;
                     }
                 }
             }
             ItemStack stack = event.getItem().clone();
-            disp.getInventory().addItem(stack);
+            if (isDrop) {
+                drop.getInventory().addItem(stack);
+            } else {
+                disp.getInventory().addItem(stack);
+            }
         }
     }
     
@@ -269,7 +300,7 @@ public class Dispensator extends JavaPlugin implements Listener {
     }
     
     private boolean isDispensator(Block block) {
-        if (!(block.getState() instanceof Dispenser)) {
+        if (!(block.getState() instanceof Dispenser) && !(block.getState() instanceof Dropper)) {
             return false;
         }
         Boolean disp = blockStore.getBoolean(block.getWorld().getName()+"_"+block.getX()+"_"+block.getY()+"_"+block.getZ(), false);
@@ -279,7 +310,7 @@ public class Dispensator extends JavaPlugin implements Listener {
         return false;
     }
     
-    private boolean isNear(Entity entity, Dispenser disp) {
+    private boolean isNear(Entity entity, BlockState disp) {
         if (entity.getLocation().getX() <= disp.getX() + dropRadius && entity.getLocation().getX() >= disp.getX() - dropRadius && entity.getLocation().getZ() <= disp.getZ() + dropRadius && entity.getLocation().getZ() >= disp.getZ() - dropRadius) {
             return true;
         }
